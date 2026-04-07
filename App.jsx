@@ -529,6 +529,7 @@ export default function App() {
   const [ttsInputText, setTtsInputText] = useState(''); // TTS 输入框文本
   const [ttsStyle, setTtsStyle] = useState(''); // TTS 风格控制提示词
   const [showTtsStylePanel, setShowTtsStylePanel] = useState(false); // 是否显示风格控制面板
+  const [retryingIndex, setRetryingIndex] = useState(-1); // 正在重试的消息索引
 
   // 计算是否有内容可发送
   const hasContent = useMemo(() => {
@@ -849,6 +850,314 @@ export default function App() {
   const triggerFileUpload = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
+
+  // 重试功能：重新发送上一条用户消息
+  const handleRetry = useCallback(async (aiMessageIndex) => {
+    // 找到对应的用户消息（AI消息的前一条）
+    const userMessageIndex = aiMessageIndex - 1;
+    if (userMessageIndex < 0 || messages[userMessageIndex]?.role !== 'user') return;
+
+    const userMessage = messages[userMessageIndex];
+    const trimmedInput = userMessage.text || '';
+
+    // 如果正在加载中，不允许重试
+    if (isLoading) return;
+
+    // 设置重试状态
+    setRetryingIndex(aiMessageIndex);
+    setIsLoading(true);
+
+    // 创建新的 AbortController
+    abortControllerRef.current = new AbortController();
+
+    // 清空当前 AI 消息，准备重新生成
+    setMessages(prev => {
+      const newMsgs = [...prev];
+      newMsgs[aiMessageIndex] = {
+        role: 'model',
+        text: '',
+        thoughts: '',
+        images: []
+      };
+      return newMsgs;
+    });
+
+    try {
+      const apiKey = "";
+
+      // 判断是否为图片生成模型
+      const isImageModel = selectedModel === 'gemini-2.5-flash-image-preview';
+
+      if (isImageModel) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+
+        const requestBody = {
+          contents: [{
+            parts: [{ text: trimmedInput }]
+          }],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE']
+          }
+        };
+
+        const delays = [1000, 2000, 4000, 8000, 16000];
+        let result = null;
+        let lastError = null;
+
+        for (let retry = 0; retry < 5; retry++) {
+          try {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(requestBody),
+              signal: abortControllerRef.current.signal
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              const blockReason = errorData.promptFeedback?.blockReason;
+              if (blockReason) {
+                throw new Error(`内容被安全过滤器拦截: ${blockReason}`);
+              }
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            result = await response.json();
+            break;
+          } catch (err) {
+            lastError = err;
+            if (retry < 4) {
+              await new Promise(res => setTimeout(res, delays[retry]));
+            }
+          }
+        }
+
+        if (!result) {
+          throw lastError || new Error('请求失败');
+        }
+
+        const responseParts = result.candidates?.[0]?.content?.parts || [];
+        let accumulatedText = '';
+        let accumulatedImages = [];
+
+        for (const part of responseParts) {
+          if (part.text) {
+            accumulatedText += part.text;
+          }
+
+          const imgData = part.inlineData || part.inline_data;
+          if (imgData) {
+            const mimeType = imgData.mimeType || imgData.mime_type;
+            const imageData = imgData.data;
+            accumulatedImages.push({
+              mimeType: mimeType,
+              data: imageData,
+              url: `data:${mimeType};base64,${imageData}`
+            });
+          }
+        }
+
+        setMessages(prev => {
+          const newMsgs = [...prev];
+          newMsgs[aiMessageIndex] = {
+            role: 'model',
+            text: accumulatedText,
+            thoughts: '',
+            images: accumulatedImages
+          };
+          return newMsgs;
+        });
+
+        if (!accumulatedText && accumulatedImages.length === 0) {
+          setEmptyContentMessage();
+        }
+      } else {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:streamGenerateContent?alt=sse&key=${apiKey}`;
+
+        // 构建到用户消息为止的所有历史
+        const historyMessages = messages.slice(0, aiMessageIndex);
+        const contents = historyMessages.map(msg => {
+          const parts = [];
+
+          if (msg.images && msg.images.length > 0) {
+            msg.images.forEach(img => {
+              parts.push({
+                inline_data: {
+                  mime_type: img.mimeType,
+                  data: img.base64
+                }
+              });
+            });
+          }
+
+          if (msg.videos && msg.videos.length > 0) {
+            msg.videos.forEach(vid => {
+              parts.push({
+                inline_data: {
+                  mime_type: vid.mimeType,
+                  data: vid.base64
+                }
+              });
+            });
+          }
+
+          if (msg.pdfs && msg.pdfs.length > 0) {
+            msg.pdfs.forEach(pdf => {
+              parts.push({
+                inline_data: {
+                  mime_type: pdf.mimeType,
+                  data: pdf.base64
+                }
+              });
+            });
+          }
+
+          if (msg.audios && msg.audios.length > 0) {
+            msg.audios.forEach(audio => {
+              parts.push({
+                inline_data: {
+                  mime_type: audio.mimeType,
+                  data: audio.base64
+                }
+              });
+            });
+          }
+
+          if (msg.textFiles && msg.textFiles.length > 0) {
+            msg.textFiles.forEach(textFile => {
+              const { text: decodedText } = safeBase64Decode(textFile.base64);
+              parts.push({ text: `【文件内容 - ${textFile.name}】\n${decodedText}` });
+            });
+          }
+
+          if (msg.text) {
+            parts.push({ text: msg.text });
+          }
+
+          return {
+            role: msg.role === 'user' ? 'user' : 'model',
+            parts: parts
+          };
+        });
+
+        const requestBody = {
+          contents: contents,
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE']
+          }
+        };
+
+        // 添加思考配置（如果支持）
+        if (thinkingLevel) {
+          requestBody.generationConfig.thinkingConfig = buildThinkingConfig(selectedModel, thinkingLevel);
+        }
+
+        // 添加系统指令（如果有）
+        if (systemPrompt) {
+          requestBody.systemInstruction = {
+            parts: [{ text: systemPrompt }]
+          };
+        }
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+          signal: abortControllerRef.current.signal
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const blockReason = errorData.promptFeedback?.blockReason;
+          if (blockReason) {
+            throw new Error(`内容被安全过滤器拦截: ${blockReason}`);
+          }
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullText = '';
+        let fullThoughts = '';
+        let generatedImages = [];
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const jsonStr = line.slice(6).trim();
+              if (!jsonStr) continue;
+
+              try {
+                const json = JSON.parse(jsonStr);
+                const candidates = json.candidates;
+                if (!candidates || candidates.length === 0) continue;
+
+                const parts = candidates[0].content?.parts || [];
+                for (const part of parts) {
+                  if (part.text) {
+                    // 检查是否为思考内容 - 多种判断方式
+                    if (part.thoughtSignature || part.thought || candidates[0].groundingMetadata?.searchEntryPoint) {
+                      fullThoughts += part.text;
+                    } else {
+                      fullText += part.text;
+                    }
+                  }
+
+                  // 处理生成的图片 - 优先使用驼峰格式，兼容下划线格式
+                  const imgData = part.inlineData || part.inline_data;
+                  if (imgData) {
+                    const mimeType = imgData.mimeType || imgData.mime_type;
+                    const imageData = imgData.data;
+                    generatedImages.push({
+                      mimeType: mimeType,
+                      data: imageData,
+                      url: `data:${mimeType};base64,${imageData}`
+                    });
+                  }
+                }
+
+                // 实时更新消息
+                setMessages(prev => {
+                  const newMsgs = [...prev];
+                  newMsgs[aiMessageIndex] = {
+                    role: 'model',
+                    text: fullText,
+                    thoughts: fullThoughts,
+                    images: generatedImages
+                  };
+                  return newMsgs;
+                });
+              } catch (e) {
+                // 忽略 JSON 解析错误
+              }
+            }
+          }
+        }
+
+        // 检查是否有内容
+        if (!fullText && !fullThoughts && generatedImages.length === 0) {
+          setEmptyContentMessage();
+        }
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
+      console.error('重试失败:', error);
+      appendErrorMessage(`重试失败：${error.message}`);
+    } finally {
+      setIsLoading(false);
+      setRetryingIndex(-1);
+    }
+  }, [messages, isLoading, selectedModel, thinkingLevel, systemPrompt, safeBase64Decode, appendErrorMessage, setEmptyContentMessage]);
 
   const handleSend = async (overrideInput = null) => {
     const trimmedInput = (overrideInput || input).trim();
@@ -1602,6 +1911,27 @@ export default function App() {
                 {/* 复制按钮 - 仅 AI 消息且 hover 时显示 */}
                 {msg.role === 'model' && msg.text && (
                   <div className="absolute -top-3 -right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-50 bg-white rounded-lg shadow-md border border-gray-200 p-1">
+                    {/* 重试按钮 */}
+                    <button
+                      onClick={() => handleRetry(index)}
+                      disabled={isLoading || retryingIndex === index}
+                      className={`p-1.5 rounded transition-all duration-200 ${
+                        retryingIndex === index
+                          ? 'bg-blue-100 text-blue-600 animate-spin cursor-not-allowed'
+                          : 'hover:bg-orange-50 text-gray-500 hover:text-orange-500'
+                      }`}
+                      title={retryingIndex === index ? '重试中...' : '重新生成'}
+                    >
+                      {retryingIndex === index ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                      )}
+                    </button>
                     {/* 播放按钮 */}
                     <button
                       onClick={() => handlePlayMessage(msg.text)}
