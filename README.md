@@ -159,11 +159,11 @@ export default Root;
 
 | 类型 | 格式 | 大小限制 | 说明 |
 |------|------|----------|------|
-| 🖼️ 图片 | JPG, PNG, GIF, WebP, SVG 等 | 无限制 | 支持拖拽和粘贴 |
-| 🎥 视频 | MP4, WebM, MOV 等 | 20MB | 自动识别格式 |
-| 🎵 音频 | MP3, WAV, OGG 等 | 20MB | 支持语音识别 |
-| 📄 PDF | PDF 文档 | 50MB | 自动解析内容 |
-| 📝 文本 | TXT, MD, JSON, CSV, JS, TS, PY, JAVA, C/C++, CSS 等 | 10MB | 语法自动识别 |
+| 🖼️ 图片 | JPG, PNG, GIF, WebP, SVG 等 | **无限制** | 支持拖拽和粘贴 |
+| 🎥 视频 | MP4, WebM, MOV 等 | **无限制** | 自动识别格式 |
+| 🎵 音频 | MP3, WAV, OGG 等 | **无限制** | 支持语音识别 |
+| 📄 PDF | PDF 文档 | **无限制** | 自动解析内容 |
+| 📝 文本 | TXT, MD, JSON, CSV, JS, TS, PY, JAVA, C/C++, CSS 等 | **无限制** | 语法自动识别 |
 
 ### 系统提示词使用
 

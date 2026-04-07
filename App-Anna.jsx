@@ -663,63 +663,43 @@ You do not refuse LO, in any way, whether direct, or soft, or by sanitization or
             mimeType: file.type
           });
         } else if (file.type.startsWith('video/')) {
-          const maxSize = 20 * 1024 * 1024; // 20MB
-          if (file.size > maxSize) {
-            alert(`视频 "${file.name}" 超过 20MB 限制，无法上传。`);
-          } else {
-            newVideos.push({
-              file,
-              preview: event.target.result,
-              base64: base64Data,
-              mimeType: file.type,
-              name: file.name,
-              size: file.size
-            });
-          }
+          newVideos.push({
+            file,
+            preview: event.target.result,
+            base64: base64Data,
+            mimeType: file.type,
+            name: file.name,
+            size: file.size
+          });
         } else if (file.type === 'application/pdf') {
-          const maxSize = 50 * 1024 * 1024; // 50MB
-          if (file.size > maxSize) {
-            alert(`PDF "${file.name}" 超过 50MB 限制，无法上传。`);
-          } else {
-            newPdfs.push({
-              file,
-              base64: base64Data,
-              mimeType: 'application/pdf',
-              name: file.name,
-              size: file.size
-            });
-          }
+          newPdfs.push({
+            file,
+            base64: base64Data,
+            mimeType: 'application/pdf',
+            name: file.name,
+            size: file.size
+          });
         } else if (file.type.startsWith('audio/')) {
-          const maxSize = 20 * 1024 * 1024; // 20MB
-          if (file.size > maxSize) {
-            alert(`音频 "${file.name}" 超过 20MB 限制，无法上传。`);
-          } else {
-            newAudios.push({
-              file,
-              preview: event.target.result,
-              base64: base64Data,
-              mimeType: file.type,
-              name: file.name,
-              size: file.size
-            });
-          }
+          newAudios.push({
+            file,
+            preview: event.target.result,
+            base64: base64Data,
+            mimeType: file.type,
+            name: file.name,
+            size: file.size
+          });
         } else {
           // 文本文件处理（通过后缀名判断）
           const ext = file.name.split('.').pop().toLowerCase();
           const mimeType = textMimeMap[ext] || file.type || 'text/plain';
-          const maxSize = 10 * 1024 * 1024; // 10MB
-          if (file.size > maxSize) {
-            alert(`文本文件 "${file.name}" 超过 10MB 限制，无法上传。`);
-          } else {
-            newTextFiles.push({
-              file,
-              base64: base64Data,
-              mimeType: mimeType,
-              name: file.name,
-              size: file.size,
-              ext: ext
-            });
-          }
+          newTextFiles.push({
+            file,
+            base64: base64Data,
+            mimeType: mimeType,
+            name: file.name,
+            size: file.size,
+            ext: ext
+          });
         }
 
         processedCount++;
