@@ -4,6 +4,12 @@
 
 一个基于 Gemini 模型的精美聊天界面，专为 **Canvas 预览模式** 设计，让你可以**免费、大量**使用 Gemini 3 Flash 模型进行对话。
 
+## 🚀 立即使用
+
+👉 [**点击进入 Canvas 免费使用**](https://gemini.google.com/share/923e94e16c54)
+
+无需配置，无需 API Key，打开即可免费使用 Gemini 3 Flash 模型！
+
 ## 💡 项目初衷
 
 Google Gemini 的 Canvas 预览功能提供了免费使用大模型的机会。本项目专为 Canvas 预览界面优化设计，让你可以：
