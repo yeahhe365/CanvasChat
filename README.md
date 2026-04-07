@@ -10,6 +10,10 @@
 
 无需配置，无需 API Key，打开即可免费使用 Gemini 3 Flash 模型！
 
+> ⚠️ **重要提示**：Canvas 预览模式的使用额度**完全独立于** Gemini 普通聊天（Chat 界面）的额度！
+> 
+> 这意味着：**即使你的 Gemini Chat 额度用完了，仍然可以通过 Canvas 继续使用大模型！**
+
 ## 💡 项目初衷
 
 Google Gemini 的 Canvas 预览功能提供了免费使用大模型的机会。本项目专为 Canvas 预览界面优化设计，让你可以：
